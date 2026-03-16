@@ -1,176 +1,200 @@
 #!/bin/bash
 
-# Colors for output - DEVIL RED THEME
+# --- Devil's Professional Red Theme ---
+# Regular Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
 WHITE='\033[1;37m'
+
+# Bold & Bright Colors
 BOLD='\033[1m'
+B_RED='\033[1;31m'
+B_GREEN='\033[1;32m'
+B_YELLOW='\033[1;33m'
+B_CYAN='\033[1;36m'
+B_WHITE='\033[1;37m'
+
+# Backgrounds
+BG_RED='\033[41m'
 NC='\033[0m' # No Color
 
-# Function to print section headers
-print_header_rule() {
-    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+# --- UI Helper Functions ---
+
+# Print a sleek separator line
+print_line() {
+    echo -e "${B_RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
-# Big ASCII header using heredoc (DEVIL RED theme)
-big_header() {
-    local title="$1"
-    echo -e "${RED}"
-    case "$title" in
-        "MAIN MENU")
+# Print a colored header
+print_header() {
+    echo -e "${BG_RED}${B_WHITE} ${1^^} ${NC}"
+}
+
+# Devil's ASCII Art Header (Main Menu)
+devil_logo() {
+echo -e "${B_RED}"
 cat <<'EOF'
-  _____  ________      _______ _      
- |  __ \|  ____\ \    / /_   _| |     
- | |  | | |__   \ \  / /  | | | |     
- | |  | |  __|   \ \/ /   | | | |     
- | |__| | |____   \  /   _| |_| |____ 
- |_____/|______|   \/   |_____|______|
-                                      
+  ::::::::  :::::::::: :::     ::::::: :::        :::::::::::
+ :+:    :+: :+:        :+:       :+:   :+:            :+:     
+ +:+    +:+ +:+        +:+       +:+   +:+            +:+     
+ +#+    +:+ +#++:++#   +#+       +#+   +#+            +#+     
+ +#+    +:+ +#+        +#+       +#+   +#+            +#+     
+ #+#    #+# #+#        #+#       #+#   #+#            #+#     
+  ########  ########## ################# ##################### 
+                        Hosting Manager
 EOF
-            ;;
-        "SYSTEM INFORMATION")
-cat <<'EOF'
-   _____ _     _   _ 
-  / ____| |   | | | |
- | (___ | |__ | | | |
-  \___ \| '_ \| | | |
-  ____) | | | | | | |
- |_____/|_| |_|_| |_|
-EOF
-            ;;
-        "DATABASE SETUP")
-cat <<'EOF'
-  _____  ____  
- |  __ \|  _ \ 
- | |  | | |_) |
- | |  | |  _ < 
- | |__| | |_) |
- |_____/|____/ 
-EOF
-            ;;
-        *)
-            echo -e "${BOLD}${title}${NC}"
-            ;;
-    esac
-    echo -e "${NC}"
+echo -e "${NC}"
 }
 
 # Function to print status messages
-print_status() { echo -e "${YELLOW}⏳ $1...${NC}"; }
-print_success() { echo -e "${GREEN}✅ $1${NC}"; }
-print_error() { echo -e "${RED}❌ $1${NC}"; }
+status_pending() { echo -e "${B_YELLOW}⏳ $1...${NC}"; }
+status_ok() { echo -e "${B_GREEN}✅ $1${NC}"; }
+status_fail() { echo -e "${B_RED}❌ $1${NC}"; }
 
-# Check if curl is installed
+# --- System Checks ---
 check_curl() {
     if ! command -v curl &>/dev/null; then
-        print_error "curl is not installed"
-        sudo apt-get update && sudo apt-get install -y curl
+        status_pending "Curl not found. Installing"
+        sudo apt-get update && sudo apt-get install -y curl &>/dev/null
+        status_ok "Curl installed"
     fi
 }
 
-# Function to run remote scripts
-run_remote_script() {
+# --- Core Functions ---
+
+# Run a remote script with style
+run_task() {
     local url=$1
-    local script_name="Devil Task"
-
-    print_header_rule
-    echo -e "${RED}Running: ${BOLD}${script_name}${NC}"
-    print_header_rule
-
+    local task_name=$2
+    
+    clear
+    print_line
+    print_header "Running Task: $task_name"
+    print_line
+    echo ""
+    
     check_curl
     local temp_script
     temp_script=$(mktemp)
     
+    status_pending "Downloading script from Devil Servers"
     if curl -fsSL "$url" -o "$temp_script"; then
+        status_ok "Download complete"
+        echo ""
+        print_line
+        echo -e "${B_WHITE}Starting Execution...${NC}"
+        print_line
+        echo ""
         chmod +x "$temp_script"
         bash "$temp_script"
         rm -f "$temp_script"
+        echo ""
+        print_line
+        status_ok "Task '$task_name' finished"
     else
-        print_error "Failed to download script from source"
+        status_fail "Failed to download task script"
     fi
-    echo -e ""
-    read -p "$(echo -e "${YELLOW}Press Enter to return to Devil Menu...${NC}")" -n 1
+    echo ""
+    read -p "$(echo -e "${B_YELLOW}Press Enter to return to Devil Menu...${NC}")"
 }
 
-# Sub-menu for Themes
-blueprint_theme_menu() {
+# Themes & Blueprint Sub-menu
+themes_menu() {
     while true; do
         clear
-        print_header_rule
-        echo -e "${RED}        🔧 DEVIL THEMES & EXTENSIONS           ${NC}"
-        print_header_rule
-        big_header "MAIN MENU"
-        echo -e "${WHITE}${BOLD}  1)${NC} ${RED}Blueprint Setup${NC}"
-        echo -e "${WHITE}${BOLD}  2)${NC} ${RED}Themes + Extensions${NC}"
-        echo -e "${WHITE}${BOLD}  0)${NC} ${RED}Back${NC}"
-        print_header_rule
+        print_line
+        echo -e "${B_RED}        🎨 DEVIL THEMES & EXTENSIONS           ${NC}"
+        print_line
+        echo -e "${B_WHITE}  [1] 🛠️  Blueprint Setup${NC}"
+        echo -e "${B_WHITE}  [2] 🎭 Themes + Extensions${NC}"
+        echo -e "${B_RED}  [0] 🔙 Back to Main Menu${NC}"
+        print_line
+        echo -ne "${B_YELLOW}😈 Select Option: ${NC}"
         read -r subchoice
         case $subchoice in
-            1) run_remote_script "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/Blueprint2.sh" ;;
-            2) bash <(curl -s https://raw.githubusercontent.com/nobita329/The-Coding-Hub/refs/heads/main/srv/thame/chang.sh) ;;
+            1) run_task "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/Blueprint2.sh" "Blueprint Setup" ;;
+            2) run_task "https://raw.githubusercontent.com/nobita329/The-Coding-Hub/refs/heads/main/srv/thame/chang.sh" "Themes & Extensions" ;;
             0) return 0 ;;
+            *) status_fail "Invalid Option" ; sleep 1 ;;
         esac
     done
 }
 
-# System info
-system_info() {
+# Display system information in a neat box
+show_sysinfo() {
     clear
-    print_header_rule
-    big_header "SYSTEM INFORMATION"
-    echo -e "${WHITE} Hostname:  ${GREEN}$(hostname)${NC}"
-    echo -e "${WHITE} OS:        ${GREEN}$(uname -srm)${NC}"
-    echo -e "${WHITE} RAM:       ${GREEN}$(free -h | awk '/Mem:/ {print $3"/"$2}')${NC}"
-    echo -e "${WHITE} Uptime:    ${GREEN}$(uptime -p)${NC}"
-    print_header_rule
-    read -p "Press Enter to continue..."
+    print_line
+    print_header "System Information"
+    print_line
+    echo -e "${B_WHITE} 🖥️  Hostname:  ${B_CYAN}$(hostname)${NC}"
+    echo -e "${B_WHITE} 🐧 OS:        ${B_CYAN}$(uname -srm)${NC}"
+    echo -e "${B_WHITE} 💾 RAM Usage: ${B_CYAN}$(free -h | awk '/Mem:/ {print $3"/"$2}')${NC}"
+    echo -e "${B_WHITE} ⏱️  Uptime:    ${B_CYAN}$(uptime -p)${NC}"
+    echo -e "${B_WHITE} 👤 User:      ${B_CYAN}$(whoami)${NC}"
+    print_line
+    echo ""
+    read -p "$(echo -e "${B_YELLOW}Press Enter to continue...${NC}")"
 }
 
-# Main menu
-show_menu() {
+# Setup database user
+setup_db() {
     clear
-    print_header_rule
-    echo -e "${RED}           🚀 DEVIL HOSTING MANAGER            ${NC}"
-    echo -e "${RED}             made by itzRealDevil              ${NC}"
-    print_header_rule
-    big_header "MAIN MENU"
-    print_header_rule
-    echo -e "${WHITE}  1)${NC} ${RED}Panel Installation${NC}"
-    echo -e "${WHITE}  2)${NC} ${RED}Wings Installation${NC}"
-    echo -e "${WHITE}  3)${NC} ${RED}Uninstall Tools${NC}"
-    echo -e "${WHITE}  4)${NC} ${RED}Themes & Blueprint${NC}"
-    echo -e "${WHITE}  5)${NC} ${RED}Cloudflare Setup${NC}"
-    echo -e "${WHITE}  6)${NC} ${RED}System Information${NC}"
-    echo -e "${WHITE}  7)${NC} ${RED}Tailscale VPN${NC}"
-    echo -e "${WHITE}  8)${NC} ${RED}Database Setup${NC}"
-    echo -e "${WHITE}  0)${NC} ${RED}Exit${NC}"
-    print_header_rule
-    echo -ne "${YELLOW}📝 Select an option [0-8]: ${NC}"
+    print_line
+    print_header "Database User Setup"
+    print_line
+    echo -ne "${B_WHITE}New DB Username: ${NC}"
+    read DB_USER
+    echo -ne "${B_WHITE}New DB Password: ${NC}"
+    read -s DB_PASS
+    echo ""
+    status_pending "Creating user $DB_USER"
+    mysql -u root -p -e "CREATE USER '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASS}'; GRANT ALL PRIVILEGES ON *.* TO '${DB_USER}'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;" &>/dev/null
+    if [ $? -eq 0 ]; then
+        status_ok "User $DB_USER created successfully"
+    else
+        status_fail "Failed to create user (check root password)"
+    fi
+    sleep 2
 }
 
-# Main loop
+# --- Main Menu Interface ---
+main_menu() {
+    clear
+    print_line
+    echo -e "${B_RED}           👿 DEVIL HOSTING MANAGER            ${NC}"
+    echo -e "${B_RED}             coded by itzRealDevil              ${NC}"
+    print_line
+    devil_logo
+    print_line
+    
+    # Grid-like menu options for better look
+    echo -e "${B_WHITE}  [1] 📦 Panel Install      ${B_WHITE}[5] ☁️  Cloudflare${NC}"
+    echo -e "${B_WHITE}  [2] 💸 Wings Install     ${B_WHITE}[6] 📊 System Info${NC}"
+    echo -e "${B_WHITE}  [3] 🗑️  Uninstall Tools    ${B_WHITE}[7] 🛡️  Tailscale VPN${NC}"
+    echo -e "${B_WHITE}  [4] 🎨 Themes & Blueprint ${B_WHITE}[8] 🗄️  Database Setup${NC}"
+    echo -e "${B_RED}  [0] ❌ Exit Devil Manager${NC}"
+    print_line
+    echo -ne "${B_YELLOW}😈 Enter Your Choice [0-8]: ${NC}"
+}
+
+# --- Main Loop ---
 while true; do
-    show_menu
+    main_menu
     read -r choice
     case $choice in
-        1) run_remote_script "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/panel2.sh" ;;
-        2) run_remote_script "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/wing2.sh" ;;
-        3) run_remote_script "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/uninstall2.sh" ;;
-        4) blueprint_theme_menu ;;
-        5) run_remote_script "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/cloudflare.sh" ;;
-        6) system_info ;;
-        7) run_remote_script "https://raw.githubusercontent.com/nobita329/The-Coding-Hub/refs/heads/main/srv/tools/Tailscale.sh" ;;
-        8) # Simple DB Setup
-           read -p "DB Username: " DB_USER
-           read -sp "DB Password: " DB_PASS
-           mysql -u root -p -e "CREATE USER '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASS}'; GRANT ALL PRIVILEGES ON *.* TO '${DB_USER}'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;"
-           print_success "Database User $DB_USER Created!"
-           sleep 2 ;;
-        0) exit 0 ;;
-        *) print_error "Invalid Option!" ; sleep 1 ;;
+        1) run_task "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/panel2.sh" "Panel Installation" ;;
+        2) run_task "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/wing2.sh" "Wings Installation" ;;
+        3) run_task "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/uninstall2.sh" "Uninstall Tools" ;;
+        4) themes_menu ;;
+        5) run_task "https://raw.githubusercontent.com/JishnuTheGamer/Vps/refs/heads/main/cd/cloudflare.sh" "Cloudflare Setup" ;;
+        6) show_sysinfo ;;
+        7) run_task "https://raw.githubusercontent.com/nobita329/The-Coding-Hub/refs/heads/main/srv/tools/Tailscale.sh" "Tailscale VPN" ;;
+        8) setup_db ;;
+        0) clear; echo -e "${B_RED}Devil is leaving... Bye!${NC}"; exit 0 ;;
+        *) status_fail "Invalid Option!" ; sleep 1 ;;
     esac
 done
