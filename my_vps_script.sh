@@ -1,25 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-# ========================================================================
-# [ DEVIL VIRTUALIZATION ENGINE - PRO ]
-# Modified & Enhanced by: itzRealDevil
-# ========================================================================
+# =============================
+# DEVIL Multi-VM Manager
+# =============================
 
-# --- Colors & Theme ---
-RED='\033[0;31m'
-B_RED='\033[1;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-WHITE='\033[1;37m'
-NC='\033[0m'
-
-# --- Function to display DEVIL header ---
+# Function to display header
 display_header() {
     clear
-    echo -e "${B_RED}"
+    echo -e "\033[1;31m" # اللون الأحمر للـ DEVIL
     cat << "EOF"
+========================================================================
   _____  ________      _______ _      
  |  __ \|  ____\ \    / /_   _| |     
  | |  | | |__   \ \  / /  | | | |     
@@ -27,66 +18,122 @@ display_header() {
  | |__| | |____   \  /   _| |_| |____ 
  |_____/|______|   \/   |_____|______|
 
-         👿 DEVIL VPS INFRASTRUCTURE
+                POWERED BY DEVIL
 ========================================================================
 EOF
-    echo -e "${NC}"
+    echo -e "\033[0m"
 }
 
-# --- Function to display colored status ---
+# Function to display colored output
 print_status() {
     local type=$1
     local message=$2
+    
     case $type in
-        "INFO")    echo -e "${WHITE}[${RED}DEVIL-INFO${WHITE}]${NC} $message" ;;
-        "WARN")    echo -e "${WHITE}[${YELLOW}DEVIL-WARN${WHITE}]${NC} $message" ;;
-        "ERROR")   echo -e "${WHITE}[${RED}DEVIL-ERROR${WHITE}]${NC} $message" ;;
-        "SUCCESS") echo -e "${WHITE}[${GREEN}DEVIL-OK${WHITE}]${NC} $message" ;;
-        "INPUT")   echo -e "${CYAN}👿 $message${NC}" ;;
+        "INFO") echo -e "\033[1;34m[INFO]\033[0m $message" ;;
+        "WARN") echo -e "\033[1;33m[WARN]\033[0m $message" ;;
+        "ERROR") echo -e "\033[1;31m[ERROR]\033[0m $message" ;;
+        "SUCCESS") echo -e "\033[1;32m[SUCCESS]\033[0m $message" ;;
+        "INPUT") echo -e "\033[1;36m[INPUT]\033[0m $message" ;;
+        *) echo "[$type] $message" ;;
     esac
 }
 
-# --- Validation Logic ---
+# Function to validate input
 validate_input() {
     local type=$1
     local value=$2
+    
     case $type in
-        "number") [[ "$value" =~ ^[0-9]+$ ]] || { print_status "ERROR" "Must be a number"; return 1; } ;;
-        "size")   [[ "$value" =~ ^[0-9]+[GgMm]$ ]] || { print_status "ERROR" "Use format like 20G or 512M"; return 1; } ;;
-        "port")   ([[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -ge 22 ] && [ "$value" -le 65535 ]) || { print_status "ERROR" "Invalid port (22-65535)"; return 1; } ;;
-        "name")   [[ "$value" =~ ^[a-zA-Z0-9_-]+$ ]] || { print_status "ERROR" "Invalid characters in name"; return 1; } ;;
+        "number")
+            if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+                print_status "ERROR" "Must be a number"
+                return 1
+            fi
+            ;;
+        "size")
+            if ! [[ "$value" =~ ^[0-9]+[GgMm]$ ]]; then
+                print_status "ERROR" "Must be a size with unit (e.g., 100G, 512M)"
+                return 1
+            fi
+            ;;
+        "port")
+            if ! [[ "$value" =~ ^[0-9]+$ ]] || [ "$value" -lt 23 ] || [ "$value" -gt 65535 ]; then
+                print_status "ERROR" "Must be a valid port number (23-65535)"
+                return 1
+            fi
+            ;;
+        "name")
+            if ! [[ "$value" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+                print_status "ERROR" "VM name can only contain letters, numbers, hyphens, and underscores"
+                return 1
+            fi
+            ;;
+        "username")
+            if ! [[ "$value" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+                print_status "ERROR" "Username must start with a letter or underscore, and contain only letters, numbers, hyphens, and underscores"
+                return 1
+            fi
+            ;;
     esac
     return 0
 }
 
-# --- Dependency Check ---
+# Function to check dependencies
 check_dependencies() {
     local deps=("qemu-system-x86_64" "wget" "cloud-localds" "qemu-img")
+    local missing_deps=()
+    
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
-            print_status "INFO" "Installing missing core: $dep..."
-            sudo apt update && sudo apt install -y qemu-system cloud-image-utils wget qemu-utils
-            break
+            missing_deps+=("$dep")
         fi
     done
+    
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        print_status "ERROR" "Missing dependencies: ${missing_deps[*]}"
+        print_status "INFO" "On Ubuntu/Debian, try: sudo apt install qemu-system cloud-image-utils wget"
+        exit 1
+    fi
 }
 
-# --- VM Configuration Management ---
+# Function to cleanup temporary files
+cleanup() {
+    if [ -f "user-data" ]; then rm -f "user-data"; fi
+    if [ -f "meta-data" ]; then rm -f "meta-data"; fi
+}
+
+# Function to get all VM configurations
+get_vm_list() {
+    find "$VM_DIR" -name "*.conf" -exec basename {} .conf \; 2>/dev/null | sort
+}
+
+# Function to load VM configuration
 load_vm_config() {
     local vm_name=$1
     local config_file="$VM_DIR/$vm_name.conf"
+    
     if [[ -f "$config_file" ]]; then
+        unset VM_NAME OS_TYPE CODENAME IMG_URL HOSTNAME USERNAME PASSWORD
+        unset DISK_SIZE MEMORY CPUS SSH_PORT GUI_MODE PORT_FORWARDS IMG_FILE SEED_FILE CREATED
+        
         source "$config_file"
         return 0
+    else
+        print_status "ERROR" "Configuration for VM '$vm_name' not found"
+        return 1
     fi
-    print_status "ERROR" "VM config not found"
-    return 1
 }
 
+# Function to save VM configuration
 save_vm_config() {
-    cat > "$VM_DIR/$VM_NAME.conf" <<EOF
+    local config_file="$VM_DIR/$VM_NAME.conf"
+    
+    cat > "$config_file" <<EOF
 VM_NAME="$VM_NAME"
 OS_TYPE="$OS_TYPE"
+CODENAME="$CODENAME"
+IMG_URL="$IMG_URL"
 HOSTNAME="$HOSTNAME"
 USERNAME="$USERNAME"
 PASSWORD="$PASSWORD"
@@ -95,116 +142,356 @@ MEMORY="$MEMORY"
 CPUS="$CPUS"
 SSH_PORT="$SSH_PORT"
 GUI_MODE="$GUI_MODE"
+PORT_FORWARDS="$PORT_FORWARDS"
 IMG_FILE="$IMG_FILE"
 SEED_FILE="$SEED_FILE"
-CREATED="$(date)"
+CREATED="$CREATED"
 EOF
+    
+    print_status "SUCCESS" "Configuration saved to $config_file"
 }
 
-# --- Core Action: Setup VM ---
+# Function to create new VM
+create_new_vm() {
+    print_status "INFO" "Creating a new VM"
+    
+    print_status "INFO" "Select an OS to set up:"
+    local os_options=()
+    local i=1
+    for os in "${!OS_OPTIONS[@]}"; do
+        echo "  $i) $os"
+        os_options[$i]="$os"
+        ((i++))
+    done
+    
+    while true; do
+        read -p "$(print_status "INPUT" "Enter your choice (1-${#OS_OPTIONS[@]}): ")" choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#OS_OPTIONS[@]} ]; then
+            local os="${os_options[$choice]}"
+            IFS='|' read -r OS_TYPE CODENAME IMG_URL DEFAULT_HOSTNAME DEFAULT_USERNAME DEFAULT_PASSWORD <<< "${OS_OPTIONS[$os]}"
+            break
+        else
+            print_status "ERROR" "Invalid selection. Try again."
+        fi
+    done
+
+    while true; do
+        read -p "$(print_status "INPUT" "Enter VM name (default: $DEFAULT_HOSTNAME): ")" VM_NAME
+        VM_NAME="${VM_NAME:-$DEFAULT_HOSTNAME}"
+        if validate_input "name" "$VM_NAME"; then
+            if [[ -f "$VM_DIR/$VM_NAME.conf" ]]; then
+                print_status "ERROR" "VM with name '$VM_NAME' already exists"
+            else
+                break
+            fi
+        fi
+    done
+
+    while true; do
+        read -p "$(print_status "INPUT" "Enter hostname (default: $VM_NAME): ")" HOSTNAME
+        HOSTNAME="${HOSTNAME:-$VM_NAME}"
+        if validate_input "name" "$HOSTNAME"; then
+            break
+        fi
+    done
+
+    while true; do
+        read -p "$(print_status "INPUT" "Enter username (default: $DEFAULT_USERNAME): ")" USERNAME
+        USERNAME="${USERNAME:-$DEFAULT_USERNAME}"
+        if validate_input "username" "$USERNAME"; then
+            break
+        fi
+    done
+
+    while true; do
+        read -s -p "$(print_status "INPUT" "Enter password (default: $DEFAULT_PASSWORD): ")" PASSWORD
+        PASSWORD="${PASSWORD:-$DEFAULT_PASSWORD}"
+        echo
+        if [ -n "$PASSWORD" ]; then
+            break
+        else
+            print_status "ERROR" "Password cannot be empty"
+        fi
+    done
+
+    while true; do
+        read -p "$(print_status "INPUT" "Disk size (default: 20G): ")" DISK_SIZE
+        DISK_SIZE="${DISK_SIZE:-20G}"
+        if validate_input "size" "$DISK_SIZE"; then
+            break
+        fi
+    done
+
+    while true; do
+        read -p "$(print_status "INPUT" "Memory in MB (default: 2048): ")" MEMORY
+        MEMORY="${MEMORY:-2048}"
+        if validate_input "number" "$MEMORY"; then
+            break
+        fi
+    done
+
+    while true; do
+        read -p "$(print_status "INPUT" "Number of CPUs (default: 2): ")" CPUS
+        CPUS="${CPUS:-2}"
+        if validate_input "number" "$CPUS"; then
+            break
+        fi
+    done
+
+    while true; do
+        read -p "$(print_status "INPUT" "SSH Port (default: 2222): ")" SSH_PORT
+        SSH_PORT="${SSH_PORT:-2222}"
+        if validate_input "port" "$SSH_PORT"; then
+            if ss -tln 2>/dev/null | grep -q ":$SSH_PORT "; then
+                print_status "ERROR" "Port $SSH_PORT is already in use"
+            else
+                break
+            fi
+        fi
+    done
+
+    while true; do
+        read -p "$(print_status "INPUT" "Enable GUI mode? (y/n, default: n): ")" gui_input
+        GUI_MODE=false
+        gui_input="${gui_input:-n}"
+        if [[ "$gui_input" =~ ^[Yy]$ ]]; then 
+            GUI_MODE=true
+            break
+        elif [[ "$gui_input" =~ ^[Nn]$ ]]; then
+            break
+        else
+            print_status "ERROR" "Please answer y or n"
+        fi
+    done
+
+    read -p "$(print_status "INPUT" "Additional port forwards (e.g., 8080:80, press Enter for none): ")" PORT_FORWARDS
+
+    IMG_FILE="$VM_DIR/$VM_NAME.img"
+    SEED_FILE="$VM_DIR/$VM_NAME-seed.iso"
+    CREATED="$(date)"
+
+    setup_vm_image
+    save_vm_config
+}
+
+# Function to setup VM image
 setup_vm_image() {
-    print_status "INFO" "Preparing Devil's Soul (Image Setup)..."
+    print_status "INFO" "Downloading and preparing image..."
     mkdir -p "$VM_DIR"
     
-    if [[ ! -f "$IMG_FILE" ]]; then
-        print_status "INFO" "Fetching OS Image..."
-        wget "$IMG_URL" -O "$IMG_FILE"
+    if [[ -f "$IMG_FILE" ]]; then
+        print_status "INFO" "Image file already exists. Skipping download."
+    else
+        print_status "INFO" "Downloading image from $IMG_URL..."
+        if ! wget --progress=bar:force "$IMG_URL" -O "$IMG_FILE.tmp"; then
+            print_status "ERROR" "Failed to download image from $IMG_URL"
+            exit 1
+        fi
+        mv "$IMG_FILE.tmp" "$IMG_FILE"
+    fi
+    
+    if ! qemu-img resize "$IMG_FILE" "$DISK_SIZE" 2>/dev/null; then
+        print_status "WARN" "Failed to resize disk image. Creating new image with specified size..."
+        rm -f "$IMG_FILE"
+        qemu-img create -f qcow2 "$IMG_FILE" "$DISK_SIZE"
     fi
 
-    qemu-img resize "$IMG_FILE" "$DISK_SIZE" &>/dev/null || true
-
-    # Cloud-init (Auto Login Setup)
     cat > user-data <<EOF
 #cloud-config
 hostname: $HOSTNAME
 ssh_pwauth: true
+disable_root: false
 users:
   - name: $USERNAME
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
-    password: $(openssl passwd -6 "$PASSWORD")
+    password: $(openssl passwd -6 "$PASSWORD" | tr -d '\n')
+chpasswd:
+  list: |
+    root:$PASSWORD
+    $USERNAME:$PASSWORD
+  expire: false
 EOF
-    echo "instance-id: iid-$VM_NAME" > meta-data
-    cloud-localds "$SEED_FILE" user-data meta-data
-    rm user-data meta-data
+
+    cat > meta-data <<EOF
+instance-id: iid-$VM_NAME
+local-hostname: $HOSTNAME
+EOF
+
+    if ! cloud-localds "$SEED_FILE" user-data meta-data; then
+        print_status "ERROR" "Failed to create cloud-init seed image"
+        exit 1
+    fi
+    print_status "SUCCESS" "VM '$VM_NAME' created successfully."
 }
 
-# --- Main Logic: Start VM ---
+# Function to start a VM
 start_vm() {
-    if load_vm_config "$1"; then
-        print_status "SUCCESS" "Ignition: Starting $1..."
-        echo -e "${YELLOW}Access via: ssh -p $SSH_PORT $USERNAME@localhost${NC}"
+    local vm_name=$1
+    if load_vm_config "$vm_name"; then
+        print_status "INFO" "Starting VM: $vm_name"
+        print_status "INFO" "SSH: ssh -p $SSH_PORT $USERNAME@localhost"
+        print_status "INFO" "Password: $PASSWORD"
         
         local qemu_cmd=(
-            qemu-system-x86_64 -m "$MEMORY" -smp "$CPUS" -cpu qemu64
+            qemu-system-x86_64
+            -m "$MEMORY"
+            -smp "$CPUS"
+            -cpu qemu64
             -drive "file=$IMG_FILE,format=qcow2,if=virtio"
             -drive "file=$SEED_FILE,format=raw,if=virtio"
-            -netdev "user,id=n0,hostfwd=tcp::$SSH_PORT-:22"
+            -boot order=c
             -device virtio-net-pci,netdev=n0
+            -netdev "user,id=n0,hostfwd=tcp::$SSH_PORT-:22"
         )
 
-        [[ "$GUI_MODE" == "true" ]] && qemu_cmd+=(-vga virtio -display gtk) || qemu_cmd+=(-nographic -serial mon:stdio)
-        
+        if [[ -n "$PORT_FORWARDS" ]]; then
+            IFS=',' read -ra forwards <<< "$PORT_FORWARDS"
+            for forward in "${forwards[@]}"; do
+                IFS=':' read -r host_port guest_port <<< "$forward"
+                qemu_cmd+=(-netdev "user,id=un${host_port},hostfwd=tcp::$host_port-:$guest_port")
+                qemu_cmd+=(-device "virtio-net-pci,netdev=un${host_port}")
+            done
+        fi
+
+        if [[ "$GUI_MODE" == true ]]; then
+            qemu_cmd+=(-vga virtio -display gtk,gl=on)
+        else
+            qemu_cmd+=(-nographic -serial mon:stdio)
+        fi
+
+        qemu_cmd+=(-device virtio-balloon-pci -object rng-random,filename=/dev/urandom,id=rng0 -device virtio-rng-pci,rng=rng0)
+
+        print_status "INFO" "Starting QEMU..."
         "${qemu_cmd[@]}"
     fi
 }
 
-# --- Menu System ---
+# Function to delete a VM
+delete_vm() {
+    local vm_name=$1
+    print_status "WARN" "This will permanently delete VM '$vm_name'!"
+    read -p "$(print_status "INPUT" "Are you sure? (y/N): ")" -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if load_vm_config "$vm_name"; then
+            rm -f "$IMG_FILE" "$SEED_FILE" "$VM_DIR/$vm_name.conf"
+            print_status "SUCCESS" "VM '$vm_name' deleted"
+        fi
+    fi
+}
+
+# Function to show VM info
+show_vm_info() {
+    local vm_name=$1
+    if load_vm_config "$vm_name"; then
+        echo "=========================================="
+        echo "VM Name: $vm_name"
+        echo "OS: $OS_TYPE"
+        echo "User: $USERNAME | Pass: $PASSWORD"
+        echo "SSH Port: $SSH_PORT"
+        echo "Resource: $MEMORY MB RAM, $CPUS CPUs"
+        echo "=========================================="
+        read -p "Press Enter to continue..."
+    fi
+}
+
+# Function to check if VM is running
+is_vm_running() {
+    pgrep -f "qemu-system-x86_64.*$1.img" >/dev/null
+}
+
+# Function to stop a running VM
+stop_vm() {
+    local vm_name=$1
+    if is_vm_running "$vm_name"; then
+        pkill -f "qemu-system-x86_64.*$vm_name.img"
+        print_status "SUCCESS" "VM $vm_name stopped"
+    else
+        print_status "INFO" "VM $vm_name is not running"
+    fi
+}
+
+# Function to edit VM configuration
+edit_vm_config() {
+    local vm_name=$1
+    if load_vm_config "$vm_name"; then
+        read -p "New Memory (MB): " MEMORY
+        save_vm_config
+    fi
+}
+
+# Function to resize VM disk
+resize_vm_disk() {
+    local vm_name=$1
+    if load_vm_config "$vm_name"; then
+        read -p "New size (e.g. 40G): " new_size
+        qemu-img resize "$IMG_FILE" "$new_size"
+        DISK_SIZE="$new_size"
+        save_vm_config
+    fi
+}
+
+# Function to show VM performance metrics
+show_vm_performance() {
+    top -p $(pgrep -f qemu-system-x86_64)
+}
+
+# Main menu function
 main_menu() {
     while true; do
         display_header
-        local vms=($(find "$VM_DIR" -name "*.conf" -exec basename {} .conf \; 2>/dev/null))
+        local vms=($(get_vm_list))
+        local vm_count=${#vms[@]}
         
-        if [ ${#vms[@]} -gt 0 ]; then
-            echo -e "${RED}Your Active Legions (VMs):${NC}"
+        if [ $vm_count -gt 0 ]; then
+            print_status "INFO" "Existing VMs:"
             for i in "${!vms[@]}"; do
-                echo -e "  $((i+1))) ${vms[$i]}"
+                local status="Stopped"
+                if is_vm_running "${vms[$i]}"; then status="Running"; fi
+                printf "  %2d) %s (%s)\n" $((i+1)) "${vms[$i]}" "$status"
             done
-            echo ""
+            echo
         fi
-
-        echo -e "${WHITE}1) Create New Devil VM${NC}"
-        echo -e "${WHITE}2) Start Existing VM${NC}"
-        echo -e "${WHITE}3) Delete a VM${NC}"
-        echo -e "${WHITE}0) Exit${NC}"
         
-        read -p "$(print_status "INPUT" "Select Command: ")" choice
+        echo "Main Menu:"
+        echo "  1) Create a new VM"
+        if [ $vm_count -gt 0 ]; then
+            echo "  2) Start a VM"
+            echo "  3) Stop a VM"
+            echo "  4) Show VM info"
+            echo "  5) Edit VM config"
+            echo "  6) Delete a VM"
+            echo "  7) Resize disk"
+            echo "  8) Performance"
+        fi
+        echo "  0) Exit"
+        echo
+        read -p "Choice: " choice
+        
         case $choice in
-            1)
-                print_status "INPUT" "Choose OS (1: Ubuntu 22, 2: Debian 12): "; read os_c
-                if [ "$os_c" == "1" ]; then
-                    OS_TYPE="Ubuntu"; IMG_URL="https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
-                else
-                    OS_TYPE="Debian"; IMG_URL="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
-                fi
-                
-                read -p "👿 VM Name: " VM_NAME
-                read -p "👿 RAM (MB): " MEMORY
-                read -p "👿 Disk (e.g. 20G): " DISK_SIZE
-                read -p "👿 SSH Port: " SSH_PORT
-                
-                USERNAME="devil"; PASSWORD="123"; HOSTNAME="$VM_NAME"
-                IMG_FILE="$VM_DIR/$VM_NAME.img"; SEED_FILE="$VM_DIR/$VM_NAME-seed.iso"; GUI_MODE="false"
-                
-                setup_vm_image && save_vm_config
-                print_status "SUCCESS" "VM $VM_NAME is ready!"
-                ;;
-            2)
-                read -p "👿 Enter VM Number: " vm_idx
-                start_vm "${vms[$((vm_idx-1))]}"
-                ;;
-            3)
-                read -p "👿 VM Number to DELETE: " vm_idx
-                rm -f "$VM_DIR/${vms[$((vm_idx-1))]}.conf" "$VM_DIR/${vms[$((vm_idx-1))]}.img"
-                print_status "SUCCESS" "Purged!"
-                ;;
+            1) create_new_vm ;;
+            2) read -p "VM No: " n; start_vm "${vms[$((n-1))]}" ;;
+            3) read -p "VM No: " n; stop_vm "${vms[$((n-1))]}" ;;
+            4) read -p "VM No: " n; show_vm_info "${vms[$((n-1))]}" ;;
+            5) read -p "VM No: " n; edit_vm_config "${vms[$((n-1))]}" ;;
+            6) read -p "VM No: " n; delete_vm "${vms[$((n-1))]}" ;;
+            7) read -p "VM No: " n; resize_vm_disk "${vms[$((n-1))]}" ;;
+            8) show_vm_performance ;;
             0) exit 0 ;;
         esac
-        read -p "Press Enter..."
     done
 }
 
-# --- Entry Point ---
-VM_DIR="$HOME/devil_vms"
+trap cleanup EXIT
 check_dependencies
+VM_DIR="${VM_DIR:-$HOME/vms}"
+mkdir -p "$VM_DIR"
+
+declare -A OS_OPTIONS=(
+    ["Ubuntu 22.04"]="ubuntu|jammy|https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img|ubuntu22|ubuntu|devil"
+    ["Ubuntu 24.04"]="ubuntu|noble|https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img|ubuntu24|ubuntu|devil"
+    ["Debian 12"]="debian|bookworm|https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2|debian12|debian|devil"
+)
+
 main_menu
